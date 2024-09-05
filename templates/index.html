@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #container {
+            display: flex;
+            width: 80%;
+            height: 80%;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #camera-container {
+            width: 60%;
+            position: relative;
+        }
+        #camera {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #controls {
+            width: 40%;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #capture {
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        #result {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .image-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .image-container .image-name {
+            margin-top: 10px;
+            font-size: 16px;
+            text-align: center;
+        }
+        #view-logs {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+        }
+        #upload {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #17a2b8;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        #file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="camera-container">
+            <video id="camera" autoplay></video>
+        </div>
+        <div id="controls">
+            <button id="capture">Capture</button>
+            <div id="result">No result</div>
+            <div id="images"></div>
+            <a id="view-logs" href="/view_logs">View Logs</a>
+            <button id="upload">Upload</button>
+            <input type="file" id="file-input" accept="image/*">
+        </div>
+    </div>
+
+    <script>
+        async function startCamera() {
+            const video = document.getElementById('camera');
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+        }
+
+        async function captureImage() {
+            const video = document.getElementById('camera');
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+            const formData = new FormData();
+            formData.append('image', imageBlob);
+
+            const response = await fetch('/recognize_face', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            const resultDiv = document.getElementById('result');
+            const imagesDiv = document.getElementById('images');
+            imagesDiv.innerHTML = '';
+
+            if (result.matches.length > 0) {
+                resultDiv.innerText = `Matched ${result.matches.length} face(s)`;
+                result.matches.forEach(match => {
+                    const imageContainer = document.createElement('div');
+                    imageContainer.className = 'image-container';
+
+                    const imgElement = document.createElement('img');
+                    imgElement.src = match.image_path;
+                    imageContainer.appendChild(imgElement);
+
+                    const nameElement = document.createElement('div');
+                    nameElement.className = 'image-name';
+                    nameElement.innerText = match.name;
+                    imageContainer.appendChild(nameElement);
+
+                    imagesDiv.appendChild(imageContainer);
+                });
+            } else {
+                resultDiv.innerText = 'No match found';
+            }
+        }
+
+        function triggerUpload() {
+            document.getElementById('file-input').click();
+        }
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/upload_image', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    alert('File uploaded successfully');
+                } else {
+                    alert('File upload failed');
+                }
+            }
+        }
+
+        document.getElementById('capture').addEventListener('click', captureImage);
+        document.getElementById('upload').addEventListener('click', triggerUpload);
+        document.getElementById('file-input').addEventListener('change', handleFileUpload);
+        startCamera();
+    </script>
+</body>
+</html>
